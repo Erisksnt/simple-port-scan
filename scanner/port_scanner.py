@@ -32,19 +32,6 @@ def scan_port(target: str, port: int, timeout: float = 0.5):
 
     return None
 
-def scan_range(host, start, end):
-    results = []
-    try:
-        for port in range(start, end + 1):
-            result = scan_port(host, port)
-            if result:
-                results.append(result)
-        return results
-
-    except KeyboardInterrupt:
-        print("\n[!] Scan interrompido pelo usuário.")
-        return results
-
 def scan_target(target: str):
     results = []
 
