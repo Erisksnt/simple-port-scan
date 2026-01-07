@@ -1,8 +1,6 @@
 port,service,status,banner
-80,http,closed,
-443,https,closed,
-8000,unknown,open,"HTTP/1.0 200 OK
+8000,HTTP-ALT,open,"HTTP/1.0 200 OK
 Server: SimpleHTTP/0.6 Python/3.14.2
-Date: Wed, 07 Jan 2026 16:21:44 GMT
+Date: Wed, 07 Jan 2026 16:41:36 GMT
 Content-type: text/html; charset=utf-8
 Content-Length: 522"

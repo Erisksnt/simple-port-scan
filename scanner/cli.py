@@ -1,110 +1,152 @@
 import argparse
-import csv
 import json
-import socket
-from datetime import datetime
+import csv
+import datetime
+import os
+
+from scanner.port_scan import scan_port, scan_ports
 from scanner.banner_grabber import grab_banner
 
-def scan_port(host, port, timeout=0.5):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(timeout)
 
-    try:
-        result = sock.connect_ex((host, port))
+VERBOSE_LEVEL = 0
 
-        try:
-            service = socket.getservbyport(port, "tcp")
-        except OSError:
-            service = "unknown"
 
-        if result == 0:
-            if result == 0:
-                banner = grab_banner(host, port)
-                status = "open"
-            else:
-                banner = ""
-                status = "closed"
+def vlog(level: int, msg: str):
+    if VERBOSE_LEVEL >= level:
+        print(msg)
 
-            return {
-                "port": port,
-                "service": service,
-                "status": status,
-                "banner": banner
-            }
 
+def export_to_csv(path: str, results: list[dict]):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["port", "service", "status", "banner"])
+        writer.writeheader()
+        for row in results:
+            writer.writerow(row)
+
+
+def export_to_json(path: str, results: list[dict]):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+
+def auto_name(ext: str) -> str:
+    os.makedirs("scans", exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    return os.path.join("scans", f"scan-{ts}.{ext}")
+
+
+def parse_ports(ports_str: str) -> list[int]:
+    ports = []
+    for item in ports_str.split(","):
+        item = item.strip()
+        if "-" in item:
+            start, end = map(int, item.split("-"))
+            ports.extend(range(start, end + 1))
         else:
-            return {
-                "port": port,
-                "service": service,
-                "status": "closed",
-                "banner": ""
-            }
+            ports.append(int(item))
+    return ports
 
-    finally:
-        sock.close()
 
-def export_results(results):
-    print("\nDeseja salvar os resultados?")
-    print("[1] JSON")
-    print("[2] CSV")
-    print("[3] CSV e JSON")
-    print("[0] Não salvar")
-    choice = input("Escolha uma opção: ").strip()
+def ask_export(results):
+    print("\n💾 Deseja salvar o resultado?")
+    print("1 — CSV")
+    print("2 — JSON")
+    print("3 — CSV + JSON")
+    print("4 — Não salvar")
 
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    choice = input("> ").strip()
 
     if choice == "1":
-        filename = f"scan_{ts}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-        print(f"✔ Resultado salvo em {filename}")
+        path = auto_name("csv")
+        export_to_csv(path, results)
+        print(f"📁 CSV salvo automaticamente em: {path}")
 
     elif choice == "2":
-        filename = f"scan_{ts}.csv"
-        with open(filename, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["port","service","status","banner"])
-            w.writeheader()
-            for r in results:
-                w.writerow(r)
-        print(f"✔ Resultado salvo em {filename}")
+        path = auto_name("json")
+        export_to_json(path, results)
+        print(f"📁 JSON salvo automaticamente em: {path}")
 
     elif choice == "3":
-        filename = f"scan_{ts}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-            
-        print(f"✔ Resultado salvo em {filename}")
-
-        filename = f"scan_{ts}.csv"
-        with open(filename, "w", newline="", encoding="utf-8") as f:
-            w = csv.DictWriter(f, fieldnames=["port","service","status","banner"])
-            w.writeheader()
-            for r in results:
-                w.writerow(r)
-        print(f"✔ Resultado salvo em {filename}")
+        path_csv = auto_name("csv")
+        path_json = auto_name("json")
+        export_to_csv(path_csv, results)
+        export_to_json(path_json, results)
+        print(f"📁 Arquivos salvos: {path_csv}, {path_json}")
 
     else:
-        print("⏭ Resultados não foram salvos.")
+        print("✔ Resultado não será salvo.")
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Simple Port Scanner CLI")
-    parser.add_argument("host", help="Host alvo")
-    parser.add_argument("-p", "--ports", default="80,443,8000",
-                        help="Lista de portas (ex: 80,443,8000)")
-    args = parser.parse_args()
+    global VERBOSE_LEVEL
 
+    parser = argparse.ArgumentParser(description="Simple Port Scanner")
+
+    parser.add_argument("host", help="Host alvo do scan")
+
+    parser.add_argument(
+        "-p", "--ports",
+        required=True,
+        help="Lista de portas (ex: 80,443,8000 ou 20-25)"
+    )
+
+    parser.add_argument("--csv", action="store_true", help="Salvar automaticamente em CSV")
+    parser.add_argument("--json", action="store_true", help="Salvar automaticamente em JSON")
+
+    parser.add_argument(
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="Exibe detalhes do scan (-v, -vv, -vvv)"
+    )
+
+    args = parser.parse_args()
+    VERBOSE_LEVEL = args.verbose
+
+    ports = parse_ports(args.ports)
     host = args.host
-    ports = [int(p.strip()) for p in args.ports.split(",")]
 
     print(f"\n🔎 Scaneando {host}...🔎\n")
+
     results = []
 
     for port in ports:
-        r = scan_port(host, port)
-        results.append(r)
-        print(f"{r['port']},{r['service']},{r['status']}")
+        vlog(1, f"[SCAN] Testando porta {port}/tcp")
 
-    export_results(results)
+        result = scan_port(host, port)
+
+        if not result:
+            vlog(2, f"[CLOSED] {port}/tcp sem resposta")
+            continue
+
+        vlog(1, f"[OPEN] {port}/tcp -> {result['service']}")
+        if result.get("banner"):
+            vlog(3, f"[BANNER]\n{result['banner']}")
+
+        results.append(result)
+
+        if VERBOSE_LEVEL == 0:
+            print(f"{result['port']},{result['service']},{result['status']}")
+
+    exported = False
+
+    if args.csv:
+        path = auto_name("csv")
+        export_to_csv(path, results)
+        print(f"\n📁 CSV salvo automaticamente em: {path}")
+        exported = True
+
+    if args.json:
+        path = auto_name("json")
+        export_to_json(path, results)
+        print(f"\n📁 JSON salvo automaticamente em: {path}")
+        exported = True
+
+    if not exported:
+        ask_export(results)
+
+    print("\n✔ Scan concluído.")
+
 
 if __name__ == "__main__":
     main()
