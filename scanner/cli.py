@@ -4,8 +4,7 @@ import csv
 import datetime
 import os
 
-from scanner.port_scan import scan_port, scan_ports
-from scanner.banner_grabber import grab_banner
+from scanner.port_scan import scan_port
 
 
 VERBOSE_LEVEL = 0
@@ -18,10 +17,12 @@ def vlog(level: int, msg: str):
 
 def export_to_csv(path: str, results: list[dict]):
     with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["port", "service", "status", "banner"])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["port", "service", "status", "banner"]
+        )
         writer.writeheader()
-        for row in results:
-            writer.writerow(row)
+        writer.writerows(results)
 
 
 def export_to_json(path: str, results: list[dict]):
@@ -37,14 +38,54 @@ def auto_name(ext: str) -> str:
 
 def parse_ports(ports_str: str) -> list[int]:
     ports = []
+
     for item in ports_str.split(","):
         item = item.strip()
+
         if "-" in item:
             start, end = map(int, item.split("-"))
             ports.extend(range(start, end + 1))
         else:
             ports.append(int(item))
+
     return ports
+
+
+# ---------- OUTPUT TABULAR ----------
+
+def print_table(results: list[dict]):
+    if not results:
+        print("Nenhuma porta aberta encontrada.")
+        return
+
+    headers = ["Port", "Service", "Status"]
+    rows = [
+        [str(r["port"]), r["service"], r["status"]]
+        for r in results
+    ]
+
+    col_widths = [
+        max(len(row[i]) for row in rows + [headers])
+        for i in range(len(headers))
+    ]
+
+    def line(left, mid, right, fill):
+        return left + mid.join(fill * (w + 2) for w in col_widths) + right
+
+    def row(values):
+        return "│ " + " │ ".join(
+            values[i].ljust(col_widths[i])
+            for i in range(len(values))
+        ) + " │"
+
+    print(line("┌", "┬", "┐", "─"))
+    print(row(headers))
+    print(line("├", "┼", "┤", "─"))
+
+    for r in rows:
+        print(row(r))
+
+    print(line("└", "┴", "┘", "─"))
 
 
 def ask_export(results):
@@ -90,6 +131,13 @@ def main():
         help="Lista de portas (ex: 80,443,8000 ou 20-25)"
     )
 
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=0.5,
+        help="Timeout por porta em segundos (default: 0.5)"
+    )
+
     parser.add_argument("--csv", action="store_true", help="Salvar automaticamente em CSV")
     parser.add_argument("--json", action="store_true", help="Salvar automaticamente em JSON")
 
@@ -105,18 +153,21 @@ def main():
 
     ports = parse_ports(args.ports)
     host = args.host
+    timeout = args.timeout
 
-    print(f"\n🔎 Scaneando {host}...🔎\n")
+    vlog(1, f"[CONFIG] Timeout: {timeout}s")
+
+    print(f"\n🔎 Scaneando {host}...\n")
 
     results = []
 
     for port in ports:
-        vlog(1, f"[SCAN] Testando porta {port}/tcp")
+        vlog(1, f"[SCAN] Porta {port}/tcp")
 
-        result = scan_port(host, port)
+        result = scan_port(host, port, timeout=timeout)
 
         if not result:
-            vlog(2, f"[CLOSED] {port}/tcp sem resposta")
+            vlog(2, f"[CLOSED] {port}/tcp")
             continue
 
         vlog(1, f"[OPEN] {port}/tcp -> {result['service']}")
@@ -125,8 +176,9 @@ def main():
 
         results.append(result)
 
-        if VERBOSE_LEVEL == 0:
-            print(f"{result['port']},{result['service']},{result['status']}")
+    # ----- OUTPUT -----
+    if VERBOSE_LEVEL == 0:
+        print_table(results)
 
     exported = False
 
