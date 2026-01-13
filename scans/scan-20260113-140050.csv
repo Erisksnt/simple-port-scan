@@ -1,8 +1,0 @@
-port,service,status,banner
-445,UNKNOWN,open,
-135,UNKNOWN,open,
-700,UNKNOWN,open,"HTTP/1.0 200 OK
-Server: SimpleHTTP/0.6 Python/3.14.2
-Date: Tue, 13 Jan 2026 17:00:42 GMT
-Content-type: text/html; charset=utf-8
-Content-Length: 559"

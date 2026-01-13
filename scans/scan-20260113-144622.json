@@ -1,12 +1,12 @@
 [
   {
-    "port": 445,
+    "port": 135,
     "service": "UNKNOWN",
     "status": "open",
     "banner": null
   },
   {
-    "port": 135,
+    "port": 445,
     "service": "UNKNOWN",
     "status": "open",
     "banner": null
@@ -15,6 +15,6 @@
     "port": 700,
     "service": "UNKNOWN",
     "status": "open",
-    "banner": "HTTP/1.0 200 OK\r\nServer: SimpleHTTP/0.6 Python/3.14.2\r\nDate: Tue, 13 Jan 2026 17:00:42 GMT\r\nContent-type: text/html; charset=utf-8\r\nContent-Length: 559"
+    "banner": "HTTP/1.0 200 OK\r\nServer: SimpleHTTP/0.6 Python/3.14.2\r\nDate: Tue, 13 Jan 2026 17:46:07 GMT\r\nContent-type: text/html; charset=utf-8\r\nContent-Length: 559"
   }
 ]

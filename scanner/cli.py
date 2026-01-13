@@ -1,31 +1,17 @@
 import argparse
-import json
-import csv
 import datetime
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from scanner.port_scan import scan_port
+
+from scanner.core.scanner import scan_ports
+from scanner.report import export_to_csv, export_to_json
+
 
 VERBOSE_LEVEL = 0
+
 
 def vlog(level: int, msg: str):
     if VERBOSE_LEVEL >= level:
         print(msg)
-
-
-def export_to_csv(path: str, results: list[dict]):
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["port", "service", "status", "banner"]
-        )
-        writer.writeheader()
-        for row in results:
-            writer.writerow(row)
-
-
-def export_to_json(path: str, results: list[dict]):
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
 
 
 def auto_name(ext: str) -> str:
@@ -70,7 +56,7 @@ def ask_export(results):
         path_json = auto_name("json")
         export_to_csv(path_csv, results)
         export_to_json(path_json, results)
-        print(f"📁 Arquivos salvos: {path_csv}, {path_json}")
+        print(f"📁 Arquivos salvos:\n- {path_csv}\n- {path_json}")
 
     else:
         print("✔ Resultado não será salvo.")
@@ -79,57 +65,59 @@ def ask_export(results):
 def main():
     global VERBOSE_LEVEL
 
-    parser = argparse.ArgumentParser(description="Simple Port Scanner")
+    parser = argparse.ArgumentParser(description="Python Port Scanner CLI")
 
     parser.add_argument("host", help="Host alvo do scan")
-    parser.add_argument("-p", "--ports",required=True,help="Lista de portas")
-    parser.add_argument("--timeout", type=float, default=0.5, help="Timeout por porta em segundos (default: 0.5)")
-    parser.add_argument("--threads",type=int,default=1,help="Número de threads (default: 1)")
+
+    parser.add_argument(
+        "-p", "--ports",
+        required=True,
+        help="Lista de portas (ex: 80,443,8000 ou 1-1000)"
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=1.0,
+        help="Timeout por porta (segundos)"
+    )
+
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=50,
+        help="Quantidade de threads (default: 50)"
+    )
+
     parser.add_argument("--csv", action="store_true", help="Salvar automaticamente em CSV")
     parser.add_argument("--json", action="store_true", help="Salvar automaticamente em JSON")
-    parser.add_argument("-v", "--verbose",action="count",default=0,help="Verbose (-v, -vv, -vvv)")
+
+    parser.add_argument(
+        "-v", "--verbose",
+        action="count",
+        default=0,
+        help="Modo verbose (-v, -vv, -vvv)"
+    )
 
     args = parser.parse_args()
     VERBOSE_LEVEL = args.verbose
 
     ports = parse_ports(args.ports)
-    host = args.host
 
-    print(f"\n🔎 Scaneando {host} com {args.threads} thread(s)...\n")
+    print(f"\n🔎 Scaneando {args.host}")
+    print(f"📌 Portas: {len(ports)} | Threads: {args.threads} | Timeout: {args.timeout}s\n")
 
-    results = []
+    results = scan_ports(
+        host=args.host,
+        ports=ports,
+        timeout=args.timeout,
+        threads=args.threads,
+        
+    )
 
-    with ThreadPoolExecutor(max_workers=args.threads) as executor:
-        futures = {
-            executor.submit(scan_port, host, port, args.timeout): port
-            for port in ports
-        }
-
-        for future in as_completed(futures):
-            port = futures[future]
-
-            try:
-                result = future.result()
-            except Exception as e:
-                vlog(2, f"[ERRO] Porta {port}: {e}")
-                continue
-
-            if not result:
-                vlog(2, f"[CLOSED] {port}/tcp")
-                continue
-
-            vlog(1, f"[OPEN] {result['port']}/tcp -> {result['service']}")
-            if result.get("banner"):
-                vlog(3, f"[BANNER]\n{result['banner']}")
-
-            results.append(result)
-
-            if VERBOSE_LEVEL == 0:
-                print(
-                    f"{result['port']:>5} | "
-                    f"{result['service']:<10} | "
-                    f"{result['status']}"
-                )
+    if VERBOSE_LEVEL == 0:
+        for r in results:
+            print(f"{r['port']},{r['service']},{r['status']}")
 
     exported = False
 
