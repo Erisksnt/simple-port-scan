@@ -1,20 +1,33 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from scanner.port_scan import scan_port
-from scanner.banner_grabber import grab_banner
+
 
 def scan_ports(
     host: str,
     ports: list[int],
     timeout: float = 0.5,
+    threads: int = 50
 ) -> list[dict]:
+    """
+    Scan múltiplas portas usando threading.
+    Retorna apenas portas abertas.
+    """
 
     results = []
 
-    for port in ports:
-        result = scan_port(host, port, timeout=timeout)
+    def worker(port: int):
+        return scan_port(host, port, timeout=timeout)
 
-        if not result:
-            continue
+    with ThreadPoolExecutor(max_workers=threads) as executor:
+        futures = {executor.submit(worker, port): port for port in ports}
 
-        results.append(result)
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                if result:
+                    results.append(result)
+            except Exception:
+                # evita que uma thread quebre o scan inteiro
+                pass
 
-    return results
+    return sorted(results, key=lambda r: r["port"])
