@@ -22,7 +22,7 @@ O projeto foi desenvolvido com uma arquitetura que separa claramente **interface
 ## 🧠 Arquitetura do Projeto
 
 ```
-Projetos/
+Erisksnt/
 ├── scanner/
 │   ├── cli.py                # Interface de linha de comando
 │   ├── banner_grabber.py     # Captura de banners (opcional)
